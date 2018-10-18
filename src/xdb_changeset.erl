@@ -46,7 +46,8 @@
   validate_inclusion/3,
   validate_number/3,
   validate_length/3,
-  validate_format/3
+  validate_format/3,
+  validate_transition/3
 ]).
 
 -import(xdb_schema_type, [cast_field_name/1]).
@@ -363,6 +364,38 @@ validate_format(Changeset, Field, Format) ->
       _       -> []
     end
   end).
+
+-spec validate_transition(t(), atom(), proplists:proplist()) -> t().
+validate_transition(Changeset, Key, Transitions) ->
+  validate_transition(Changeset, Key, Transitions, get_change(Changeset, Key)).
+
+%% @private
+-spec validate_transition(t(), atom(), proplists:proplist(), any()) -> t().
+validate_transition(Changeset, _Key, _Transitions, undefined) ->
+  Changeset;
+validate_transition(Changeset, Key, Transitions, NewValue) ->
+  Value = maps:get(Key, data(Changeset)),
+
+  case lists:keyfind(Value, 1, Transitions) of
+    {Value, NewValue} ->
+      Changeset;
+    {Value, PossibleValues} when is_list(PossibleValues) ->
+      validate_transition_member(Changeset, Key, NewValue, PossibleValues);
+    _ ->
+      transition_error(Changeset, Key, NewValue)
+  end.
+
+%% @private
+validate_transition_member(Changeset, Key, NewValue, PossibleValues) ->
+  case lists:member(NewValue, PossibleValues) of
+    true  -> Changeset;
+    false -> transition_error(Changeset, Key, NewValue)
+  end.
+
+%% @private
+transition_error(Changeset, Key, NewValue) ->
+  Msg = <<"can't change to ", (eutils:to_bin(NewValue))/binary>>,
+  add_error(Changeset, Key, Msg).
 
 %%%=============================================================================
 %%% Internal functions
